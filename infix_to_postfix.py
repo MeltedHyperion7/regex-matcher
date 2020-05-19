@@ -163,5 +163,54 @@ def create_nfa_from_postfix(regex: str):
 
     return nfa_stack[0]
 
-nfa = create_nfa_from_postfix('abb.+.a.')
-print('Done.')
+def input_string_to_nfa(string: str, nfa: NFA):
+    """ Pass [string] as input to [nfa] and return True if [nfa] reaches an accept state, else return False. """
+
+    # ? is it possible to get a loop of epsilon transitions
+
+    # we store a list of all current active states in the nfa
+    # as each character is read, we follow all transition(including all series of epsilon transitions) to get a new set of active states
+
+    # begin with the start state as the only active state
+    active_states = [nfa.start_state]
+
+    # mark all states as active that can be reached by following epsilon arrows from the start state
+    i = 0
+    while i < len(active_states):
+        for transition_char, transition_state in active_states[i].transitions:
+            if transition_char == 'eps':
+                active_states.append(transition_state)
+        i += 1
+
+    string_index = 0
+    while string_index < len(string) and len(active_states) > 0:
+        character = string[string_index]
+        new_active_states = []
+        for active_state in active_states:
+            # make active all states that can be reached from this state by reading [character]
+            next_states = [transition_state for transition_char, transition_state in active_state.transitions if transition_char == character]
+
+            # now make active all states that can be reached by epsilon arrows from these states
+            i = 0
+            while i < len(next_states):
+                for transition_char, transition_state in next_states[i].transitions:
+                    if transition_char == 'eps':
+                        next_states.append(transition_state)
+                i += 1
+                
+            new_active_states.extend(next_states)
+
+        active_states = new_active_states
+        string_index += 1
+
+    for active_state in active_states:
+        if active_state.is_accepting:
+            return True
+
+    return False
+
+def match_regex(regex: str, string: str):
+    """ Match [string] against the regular expression [regex]. """
+    postfix_regex = infix_to_postfix(regex)
+    nfa = create_nfa_from_postfix(postfix_regex)
+    return input_string_to_nfa(string, nfa)
