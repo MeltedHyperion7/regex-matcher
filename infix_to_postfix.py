@@ -1,3 +1,6 @@
+from nfa import State, NFA
+from InvalidRegexException import InvalidRegexException
+
 precedence = {
     # TODO add '?' operator
     '(': 1,
@@ -62,4 +65,103 @@ def infix_to_postfix(infix_regex: str):
 
     return result
 
-print(infix_to_postfix('a((ab)+c)+'))
+def create_nfa_from_postfix(regex: str):
+    """ Creates an NFA from a postfix regex as created by [infix_to_postifix]. """
+
+    nfa_stack = []
+
+    for char in regex:
+        if char == '.':
+            # to concat two nfas, add an epsilon arrow from every accepting state
+            # of the first to the start state of the second and turn all accepting states
+            # of the first into non accepting states
+
+            if len(nfa_stack) < 2:
+                raise InvalidRegexException()
+
+            nfa2 = nfa_stack.pop()
+            nfa1 = nfa_stack.pop()
+
+            if nfa2.is_one_character_nfa:
+                nfa2_matched_character, nfa2_accept_state = nfa2.start_state.transitions[0]
+                for accept_state in nfa1.accept_states:
+                    accept_state.add_transition(nfa2_matched_character, nfa2_accept_state)
+                    accept_state.is_accepting = False
+
+            else:
+                for accept_state in nfa1.accept_states:
+                    accept_state.add_transition('eps', nfa2.start_state)
+                    accept_state.is_accepting = False
+
+
+            nfa1.accept_states = nfa2.accept_states
+            nfa1.is_one_character_nfa = False
+            nfa_stack.append(nfa1)
+
+            # for garbage collection
+            nfa2.start_state = None
+            nfa2.accept_states = None
+        elif char == '*':
+            # to apply a kleene star to an nfa, add a new start state, which is also an accept state,
+            # to the nfa with an epsilon arrow going into the original start state.
+            # add epsilon arrows from every accept state to the original start state
+
+            if len(nfa_stack) < 1:
+                raise InvalidRegexException()
+
+            nfa = nfa_stack.pop()
+            new_start_state = State([('eps', nfa.start_state)], True)
+            for accept_state in nfa.accept_states:
+                accept_state.add_transition('eps', nfa.start_state)
+
+            nfa.accept_states.append(new_start_state)
+            nfa.start_state = new_start_state
+            nfa.is_one_character_nfa = False
+            nfa_stack.append(nfa)
+
+        elif char == '+':
+            # TODO try this out on paper
+            # we add epsilon arrows from every accept state to the start state
+
+            if len(nfa_stack) < 1:
+                raise InvalidRegexException()
+
+            nfa = nfa_stack.pop()
+            for accept_state in nfa.accept_states:
+                accept_state.add_transition('eps', nfa.start_state)
+
+            nfa.is_one_character_nfa = False
+            nfa_stack.append(nfa)
+        elif char == '|':
+            # we apply the union operation by adding a new non accepting start state with
+            # epsilon arrows going into the start state of each operand nfa
+
+            if len(nfa_stack) < 2:
+                raise InvalidRegexException()
+
+            nfa2 = nfa_stack.pop()
+            nfa1 = nfa_stack.pop()
+
+            new_start_state = State([('eps', nfa1.start_state), ('eps', nfa2.start_state)], False)
+
+            nfa1.start_state = new_start_state
+            nfa1.accept_states.extend(nfa2.accept_states)
+            nfa1.is_one_character_nfa = False
+            nfa_stack.append(nfa1)
+
+            # for garbage collection
+            nfa2.start_state = None
+            nfa2.accept_states = None
+        else:
+            # character from the alphabet
+            accept_state = State([], True)
+            start_state = State([(char, accept_state)], False)
+            nfa_stack.append(NFA(start_state, [accept_state], True))
+
+    if len(nfa_stack) != 1:
+        raise InvalidRegexException()
+
+    return nfa_stack[0]
+
+nfa = create_nfa_from_postfix('abb.+.a.')
+print('Done.')
